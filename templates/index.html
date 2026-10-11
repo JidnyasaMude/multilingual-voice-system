@@ -1,0 +1,145 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multilingual Voice Reminder</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <p class="eyebrow">ESP32 PROJECT · PHASE 1</p>
+            <h1>Multilingual Voice Assistant</h1>
+            <p class="subtitle">Announcements and medicine reminders</p>
+        </div>
+        <div class="status">
+            <span class="status-dot"></span>
+            <span id="serverStatus">Connecting...</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="notice">
+            <strong>Simulation mode</strong>
+            <p>This phase tests the web app and mock server. It does not produce real ESP32 speech.</p>
+        </section>
+
+        <section class="panel">
+            <h2>Voice Announcement</h2>
+            <p class="muted">Type your message and choose a language.</p>
+
+            <form id="announcementForm">
+                <label for="announcementText">Announcement text</label>
+                <textarea id="announcementText" maxlength="500"
+                    placeholder="Example: Please take your medicine" required></textarea>
+
+                <label for="announcementLanguage">Language</label>
+                <select id="announcementLanguage" required>
+                    <option value="en">English</option>
+                    <option value="hi">Hindi (हिन्दी)</option>
+                    <option value="mr">Marathi (मराठी)</option>
+                </select>
+
+                <button type="submit">Send Announcement</button>
+            </form>
+            <p id="announcementResult" class="result" aria-live="polite"></p>
+        </section>
+
+        <section class="panel">
+            <h2>Medicine Reminders</h2>
+            <p class="muted">Add a reminder or edit an existing one.</p>
+
+            <form id="reminderForm">
+                <input type="hidden" id="reminderId">
+
+                <label for="medicineName">Medicine name</label>
+                <input id="medicineName" maxlength="100"
+                    placeholder="Example: Vitamin tablet" required>
+
+                <div class="form-grid">
+                    <div>
+                        <label for="reminderTime">Reminder time</label>
+                        <input type="time" id="reminderTime" required>
+                    </div>
+
+                    <div>
+                        <label for="reminderLanguage">Announcement language</label>
+                        <select id="reminderLanguage">
+                            <option value="en">English</option>
+                            <option value="hi">Hindi (हिन्दी)</option>
+                            <option value="mr">Marathi (मराठी)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <label for="reminderRepeat">Repeat</label>
+                <select id="reminderRepeat">
+                    <option value="daily">Daily</option>
+                    <option value="once">Once</option>
+                </select>
+
+                <div class="button-row">
+                    <button type="submit" id="saveReminderButton">Save Reminder</button>
+                    <button type="button" id="cancelEditButton" class="secondary" hidden>
+                        Cancel Edit
+                    </button>
+                </div>
+            </form>
+
+            <div class="search-row">
+                <input id="reminderSearch"
+                    placeholder="Search medicine or language">
+                <button type="button" id="searchButton" class="secondary">Search</button>
+                <button type="button" id="clearSearchButton" class="secondary">Clear</button>
+            </div>
+
+            <p id="reminderResult" class="result" aria-live="polite"></p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Medicine</th>
+                            <th>Time</th>
+                            <th>Language</th>
+                            <th>Repeat</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reminderTableBody">
+                        <tr>
+                            <td colspan="5">Loading reminders...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>System Status</h2>
+            <div class="status-grid">
+                <div class="status-card">
+                    <span class="muted">Server</span>
+                    <strong id="serverType">Checking...</strong>
+                </div>
+                <div class="status-card">
+                    <span class="muted">RTC hardware</span>
+                    <strong id="rtcStatus">Checking...</strong>
+                </div>
+                <div class="status-card">
+                    <span class="muted">Real TTS</span>
+                    <strong id="ttsStatus">Checking...</strong>
+                </div>
+            </div>
+            <p id="lastAnnouncement" class="muted">No announcement yet.</p>
+        </section>
+    </main>
+
+    <footer>
+        Phase 1 · Local web app and mock HTTP server
+    </footer>
+</body>
+</html>

@@ -1,0 +1,283 @@
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f4f6fb;
+    color: #1f2937;
+    line-height: 1.5;
+}
+
+.topbar {
+    background: #17345c;
+    color: white;
+    padding: 28px max(20px, calc((100% - 1050px) / 2));
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.eyebrow {
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    color: #c9dcff;
+}
+
+h1 {
+    margin: 5px 0;
+    font-size: clamp(24px, 4vw, 34px);
+}
+
+.subtitle {
+    margin: 0;
+    color: #e0eaff;
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    white-space: nowrap;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fbbf24;
+}
+
+.container {
+    max-width: 1050px;
+    margin: 28px auto;
+    padding: 0 18px;
+}
+
+.notice {
+    background: #fff5d8;
+    border: 1px solid #f1d78a;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+}
+
+.notice p {
+    margin: 4px 0 0;
+}
+
+.panel {
+    background: white;
+    padding: 24px;
+    margin-bottom: 22px;
+    border: 1px solid #e0e5ed;
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(20, 40, 70, 0.04);
+}
+
+h2 {
+    margin: 0 0 5px;
+    color: #17345c;
+}
+
+.muted {
+    color: #667085;
+    font-size: 14px;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+label {
+    font-weight: 600;
+    font-size: 14px;
+    margin-top: 6px;
+}
+
+input,
+textarea,
+select {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    font: inherit;
+    background: white;
+}
+
+textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    outline: 2px solid #a8c7ff;
+    border-color: #356ac3;
+}
+
+button {
+    border: none;
+    background: #2457a7;
+    color: white;
+    padding: 11px 16px;
+    border-radius: 7px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+button:hover {
+    background: #173f80;
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+form > button {
+    margin-top: 8px;
+}
+
+.secondary {
+    background: #e9eef7;
+    color: #203c63;
+}
+
+.secondary:hover {
+    background: #d8e2f2;
+}
+
+.form-grid,
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.form-grid > div {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.button-row,
+.search-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.search-row {
+    margin: 22px 0 8px;
+}
+
+.search-row input {
+    flex: 1;
+    min-width: 100px;
+}
+
+.result {
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.table-wrap {
+    overflow-x: auto;
+    margin-top: 14px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 14px;
+}
+
+th,
+td {
+    padding: 12px 10px;
+    border-bottom: 1px solid #e5eaf1;
+    vertical-align: top;
+}
+
+th {
+    background: #f1f5fb;
+    color: #17345c;
+}
+
+.actions {
+    display: flex;
+    gap: 7px;
+}
+
+.actions button {
+    padding: 7px 10px;
+}
+
+.delete-button {
+    background: #b42318;
+}
+
+.delete-button:hover {
+    background: #8e1c13;
+}
+
+.status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 18px;
+}
+
+.status-card {
+    background: #f4f7fc;
+    padding: 15px;
+    border-radius: 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    overflow-wrap: anywhere;
+}
+
+footer {
+    text-align: center;
+    color: #667085;
+    padding: 20px;
+    font-size: 13px;
+}
+
+@media (max-width: 650px) {
+    .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .panel {
+        padding: 17px;
+    }
+
+    .form-grid,
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .search-row {
+        flex-wrap: wrap;
+    }
+
+    .search-row input {
+        flex-basis: 100%;
+    }
+
+    .actions {
+        flex-direction: column;
+    }
+}
