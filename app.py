@@ -1,14 +1,24 @@
-
 from flask import Flask, render_template, request, jsonify
 from datetime import datetime
 from uuid import uuid4
+from collections import deque
+from threading import Lock
 
 app = Flask(__name__)
 
 reminders = []
 last_announcement = None
 
+# Pending announcements for the ESP32 demo.
+announcement_queue = deque()
+queue_lock = Lock()
+
 SUPPORTED_LANGUAGES = ["en", "hi", "mr"]
+MAX_ANNOUNCEMENT_LENGTH = 500
+
+
+def current_time():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @app.route("/")
@@ -20,11 +30,12 @@ def home():
 def get_status():
     return jsonify({
         "online": True,
-        "server": "Mock HTTP Server",
+        "server": "Flask HTTP Server",
         "rtcOk": False,
         "ttsLanguages": [],
         "speechMode": "simulation_only",
-        "lastAnnouncement": last_announcement
+        "lastAnnouncement": last_announcement,
+        "pendingAnnouncements": len(announcement_queue)
     })
 
 
@@ -43,7 +54,7 @@ def announce():
             "message": "Please enter announcement text."
         }), 400
 
-    if len(text) > 500:
+    if len(text) > MAX_ANNOUNCEMENT_LENGTH:
         return jsonify({
             "success": False,
             "message": "Announcement must be 500 characters or less."
@@ -55,17 +66,44 @@ def announce():
             "message": "Select a valid language."
         }), 400
 
-    last_announcement = {
+    announcement = {
+        "id": str(uuid4())[:8],
         "text": text,
         "language": language,
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "time": current_time()
     }
+
+    last_announcement = announcement.copy()
+
+    with queue_lock:
+        announcement_queue.append(announcement.copy())
 
     return jsonify({
         "success": True,
-        "message": "Announcement request received. No real speech was generated.",
-        "announcement": last_announcement,
+        "message": (
+            "Announcement queued for the ESP32 simulation. "
+            "No real speech was generated."
+        ),
+        "announcement": announcement,
         "simulated": True
+    })
+
+
+@app.route("/api/next-announcement", methods=["GET"])
+def next_announcement():
+    # The ESP32 polls this endpoint and receives one queued message.
+    with queue_lock:
+        if announcement_queue:
+            announcement = announcement_queue.popleft()
+            return jsonify({
+                "success": True,
+                "available": True,
+                "announcement": announcement
+            })
+
+    return jsonify({
+        "success": True,
+        "available": False
     })
 
 
@@ -90,22 +128,22 @@ def add_reminder():
     data = request.get_json(silent=True) or {}
 
     name = str(data.get("medicineName", "")).strip()
-    time = str(data.get("time", "")).strip()
+    time_value = str(data.get("time", "")).strip()
     language = data.get("language", "en")
     repeat = data.get("repeat", "daily")
-
-    try:
-        datetime.strptime(time, "%H:%M")
-    except ValueError:
-        return jsonify({
-            "success": False,
-            "message": "Enter a valid time."
-        }), 400
 
     if not name or len(name) > 100:
         return jsonify({
             "success": False,
             "message": "Medicine name is required (maximum 100 characters)."
+        }), 400
+
+    try:
+        datetime.strptime(time_value, "%H:%M")
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "message": "Enter a valid time."
         }), 400
 
     if language not in SUPPORTED_LANGUAGES:
@@ -123,7 +161,7 @@ def add_reminder():
     reminder = {
         "id": str(uuid4())[:8],
         "medicineName": name,
-        "time": time,
+        "time": time_value,
         "language": language,
         "repeat": repeat
     }
@@ -144,22 +182,22 @@ def update_reminder(reminder_id):
     for reminder in reminders:
         if reminder["id"] == reminder_id:
             name = str(data.get("medicineName", "")).strip()
-            time = str(data.get("time", "")).strip()
+            time_value = str(data.get("time", "")).strip()
             language = data.get("language", "en")
             repeat = data.get("repeat", "daily")
-
-            try:
-                datetime.strptime(time, "%H:%M")
-            except ValueError:
-                return jsonify({
-                    "success": False,
-                    "message": "Enter a valid time."
-                }), 400
 
             if not name or len(name) > 100:
                 return jsonify({
                     "success": False,
                     "message": "Medicine name is required (maximum 100 characters)."
+                }), 400
+
+            try:
+                datetime.strptime(time_value, "%H:%M")
+            except ValueError:
+                return jsonify({
+                    "success": False,
+                    "message": "Enter a valid time."
                 }), 400
 
             if language not in SUPPORTED_LANGUAGES:
@@ -176,7 +214,7 @@ def update_reminder(reminder_id):
 
             reminder.update({
                 "medicineName": name,
-                "time": time,
+                "time": time_value,
                 "language": language,
                 "repeat": repeat
             })
@@ -198,6 +236,7 @@ def delete_reminder(reminder_id):
     for reminder in reminders:
         if reminder["id"] == reminder_id:
             reminders.remove(reminder)
+
             return jsonify({
                 "success": True,
                 "message": "Reminder deleted."
@@ -210,4 +249,4 @@ def delete_reminder(reminder_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)
