@@ -1,0 +1,28 @@
+# Ignore files by default
+*
+
+# Allow project folders
+!*/
+
+# Allow application files
+!.gitignore
+!app.py
+!requirements.txt
+!static/
+!static/**
+!templates/
+!templates/**
+
+# Ignore secrets and local environment files
+.env
+.env.*
+!.env.example
+
+# Ignore Python cache and virtual environments
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Ignore local development files
+*.log

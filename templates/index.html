@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,7 +10,7 @@
 <body>
     <header class="topbar">
         <div>
-            <p class="eyebrow">ESP32 PROJECT · PHASE 1</p>
+            <p class="eyebrow">ESP32 PROJECT · LIVE</p>
             <h1>Multilingual Voice Assistant</h1>
             <p class="subtitle">Announcements and medicine reminders</p>
         </div>
@@ -23,8 +22,8 @@
 
     <main class="container">
         <section class="notice">
-            <strong>Simulation mode</strong>
-            <p>This phase tests the web app and mock server. It does not produce real ESP32 speech.</p>
+            <strong>Live mode</strong>
+            <p>Announcements and reminders reach the ESP32 within about 15 seconds.</p>
         </section>
 
         <section class="panel">
@@ -33,7 +32,7 @@
 
             <form id="announcementForm">
                 <label for="announcementText">Announcement text</label>
-                <textarea id="announcementText" maxlength="500"
+                <textarea id="announcementText" maxlength="150"
                     placeholder="Example: Please take your medicine" required></textarea>
 
                 <label for="announcementLanguage">Language</label>
@@ -56,7 +55,7 @@
                 <input type="hidden" id="reminderId">
 
                 <label for="medicineName">Medicine name</label>
-                <input id="medicineName" maxlength="100"
+                <input id="medicineName" maxlength="40"
                     placeholder="Example: Vitamin tablet" required>
 
                 <div class="form-grid">
@@ -126,20 +125,21 @@
                     <strong id="serverType">Checking...</strong>
                 </div>
                 <div class="status-card">
-                    <span class="muted">RTC hardware</span>
+                    <span class="muted">ESP32 device</span>
                     <strong id="rtcStatus">Checking...</strong>
                 </div>
                 <div class="status-card">
-                    <span class="muted">Real TTS</span>
+                    <span class="muted">Speech languages</span>
                     <strong id="ttsStatus">Checking...</strong>
                 </div>
             </div>
             <p id="lastAnnouncement" class="muted">No announcement yet.</p>
+            <p id="lastDose" class="muted"></p>
         </section>
     </main>
 
     <footer>
-        Phase 1 · Local web app and mock HTTP server
+        ESP32 voice reminder system
     </footer>
 </body>
 </html>

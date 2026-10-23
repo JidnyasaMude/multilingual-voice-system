@@ -1,8 +1,6 @@
 
 const $ = (id) => document.getElementById(id);
 
-const ESP32_BASE_URL = "http://localhost:8180";
-
 async function api(url, options = {}) {
     const response = await fetch(url, {
         ...options,
@@ -37,121 +35,35 @@ function languageName(language) {
     return languages[language] || language;
 }
 
-// CONNECT TO ESP32 AND SCHEDULE A REMINDER
-
-async function scheduleReminderOnESP32(reminder) {
-    const timeResponse = await fetch(`${ESP32_BASE_URL}/api/time`);
-
-    if (!timeResponse.ok) {
-        throw new Error("Could not read time from ESP32.");
-    }
-
-    const timeData = await timeResponse.json();
-
-    const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/
-        .exec(timeData.time);
-
-    if (!match) {
-        throw new Error("ESP32 returned an invalid date or time.");
-    }
-
-    const [, y, mo, d, h, mi, s] = match;
-
-    const now = new Date(
-        Number(y),
-        Number(mo) - 1,
-        Number(d),
-        Number(h),
-        Number(mi),
-        Number(s)
-    );
-
-    const [targetHour, targetMinute] = reminder.time
-        .split(":")
-        .map(Number);
-
-    const target = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        targetHour,
-        targetMinute,
-        0
-    );
-
-    if (target <= now) {
-        target.setDate(target.getDate() + 1);
-    }
-
-    const pad = (value) => String(value).padStart(2, "0");
-
-    const datetime =
-        `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())} ` +
-        `${pad(target.getHours())}:${pad(target.getMinutes())}:00`;
-
-    const response = await fetch(`${ESP32_BASE_URL}/api/reminder`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            text: reminder.medicineName,
-            language: reminder.language,
-            datetime: datetime
-        })
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-        throw new Error(
-            result.error || "ESP32 could not save the reminder."
-        );
-    }
-
-    return datetime;
-}
-
 // SYSTEM STATUS
 
 async function loadStatus() {
     try {
         const data = await api("/api/status");
 
-        $("serverStatus").textContent = data.online
-            ? "Mock server connected"
-            : "Server offline";
-
+        $("serverStatus").textContent = data.deviceOnline
+            ? "ESP32 online" : "ESP32 offline";
         $("serverType").textContent = data.server;
-
-        $("rtcStatus").textContent = data.rtcOk
-            ? "Connected"
-            : "Not connected (simulation)";
-
+        $("rtcStatus").textContent = data.deviceOnline
+            ? `Online (WiFi ${data.rssi} dBm)`
+            : "Offline - check power and WiFi";
         $("ttsStatus").textContent = data.ttsLanguages.length
             ? data.ttsLanguages.map(languageName).join(", ")
-            : "Not connected (simulation)";
+            : "Unknown (device offline)";
 
-        if (data.lastAnnouncement) {
-            $("lastAnnouncement").textContent =
-                "Last request: " +
-                data.lastAnnouncement.text +
-                " (" +
-                languageName(data.lastAnnouncement.language) +
-                ")";
-        } else {
-            $("lastAnnouncement").textContent = "No announcement yet.";
-        }
+        $("lastAnnouncement").textContent = data.lastAnnouncement
+            ? "Last request: " + data.lastAnnouncement.text +
+              " (" + languageName(data.lastAnnouncement.language) + ")"
+            : "No announcement yet.";
+
+        $("lastDose").textContent = data.lastDose
+            ? `Last dose: ${data.lastDose.medicineName} - ${data.lastDose.status} at ${data.lastDose.time}`
+            : "No dose recorded yet.";
     } catch (error) {
         $("serverStatus").textContent = "Server offline";
-        $("serverType").textContent = "Unavailable";
-        $("rtcStatus").textContent = "Not verified";
-        $("ttsStatus").textContent = "Not verified";
-
         showMessage("announcementResult", error.message, false);
     }
 }
-
 // VOICE ANNOUNCEMENT
 
 $("announcementForm").addEventListener("submit", async (event) => {
@@ -264,47 +176,23 @@ $("reminderForm").addEventListener("submit", async (event) => {
     const button = $("saveReminderButton");
     button.disabled = true;
 
-    try {
-        if (!id) {
-            // Send the new reminder to the ESP32 first.
-            const scheduledTime = await scheduleReminderOnESP32(reminder);
+        try {
+        const url = id
+            ? `/api/reminders/${encodeURIComponent(id)}`
+            : "/api/reminders";
 
-            // Save it in the Flask web app's reminder list.
-            const data = await api("/api/reminders", {
-                method: "POST",
-                body: JSON.stringify(reminder)
-            });
+        const data = await api(url, {
+            method: id ? "PUT" : "POST",
+            body: JSON.stringify(reminder)
+        });
 
-            showMessage(
-                "reminderResult",
-                `Reminder sent to ESP32 for ${scheduledTime}. ` +
-                `${data.message}`
-            );
-        } else {
-            // Editing changes the web app list only.
-            const data = await api(
-                `/api/reminders/${encodeURIComponent(id)}`,
-                {
-                    method: "PUT",
-                    body: JSON.stringify(reminder)
-                }
-            );
-
-            showMessage(
-                "reminderResult",
-                data.message +
-                " Note: the ESP32 reminder was not changed."
-            );
-        }
+        showMessage("reminderResult",
+            data.message + " The ESP32 syncs automatically within about 15 seconds.");
 
         resetReminderForm();
         await loadReminders($("reminderSearch").value.trim());
     } catch (error) {
-        showMessage("reminderResult", error.message, false);
-    } finally {
-        button.disabled = false;
-    }
-});
+}});
 
 // EDIT A REMINDER
 
@@ -380,3 +268,4 @@ $("reminderSearch").addEventListener("keydown", (event) => {
 
 loadStatus();
 loadReminders();
+setInterval(loadStatus, 10000);
