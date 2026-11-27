@@ -281,3 +281,5 @@ footer {
         flex-direction: column;
     }
 }
+.clip-card audio { width: 100%; margin: 8px 0; }
+.clip-card input[type="file"] { width: 100%; margin: 6px 0; }

@@ -48,6 +48,16 @@
         </section>
 
         <section class="panel">
+            <h2>Dose Voice Clips</h2>
+            <p class="muted">
+                Upload a recorded voice (MP3, up to 300 KB, about 30 seconds) for each part of
+                the day. The ESP32 downloads it and plays it offline.
+            </p>
+            <div id="clipGrid" class="status-grid"></div>
+            <p id="clipResult" class="result" aria-live="polite"></p>
+        </section>
+
+        <section class="panel">
             <h2>Medicine Reminders</h2>
             <p class="muted">Add a reminder or edit an existing one.</p>
 
@@ -73,6 +83,15 @@
                         </select>
                     </div>
                 </div>
+
+                <label for="reminderSlot">Voice for this reminder</label>
+                <select id="reminderSlot">
+                    <option value="">Text-to-speech (speaks the medicine name)</option>
+                    <option value="morning">Recorded clip: Morning dose</option>
+                    <option value="afternoon">Recorded clip: Afternoon dose</option>
+                    <option value="evening">Recorded clip: Evening dose</option>
+                    <option value="night">Recorded clip: Night dose</option>
+                </select>
 
                 <label for="reminderRepeat">Repeat</label>
                 <select id="reminderRepeat">
@@ -105,12 +124,13 @@
                             <th>Time</th>
                             <th>Language</th>
                             <th>Repeat</th>
+                            <th>Voice</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="reminderTableBody">
                         <tr>
-                            <td colspan="5">Loading reminders...</td>
+                            <td colspan="6">Loading reminders...</td>
                         </tr>
                     </tbody>
                 </table>
