@@ -8,22 +8,34 @@ from threading import Lock
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 app = Flask(__name__)
 
 IST = ZoneInfo("Asia/Kolkata")
 SUPPORTED_LANGUAGES = ["en", "hi", "mr"]
-SLOTS = ["morning", "afternoon", "evening", "night"]
 MAX_ANNOUNCEMENT_LENGTH = 150
 MAX_NAME_LENGTH = 40
 MAX_REMINDERS = 8
 MAX_CLIP_BYTES = 300 * 1024
 DEVICE_ONLINE_SECONDS = 40
 
-app.config["MAX_CONTENT_LENGTH"] = MAX_CLIP_BYTES + 50 * 1024
+# id, label, suggested time, group
+VOICES = [
+    {"id": "morning",          "label": "Morning",          "time": "08:00", "group": "Time of day"},
+    {"id": "afternoon",        "label": "Afternoon",        "time": "15:00", "group": "Time of day"},
+    {"id": "evening",          "label": "Evening",          "time": "18:00", "group": "Time of day"},
+    {"id": "night",            "label": "Night",            "time": "22:00", "group": "Time of day"},
+    {"id": "before_breakfast", "label": "Before breakfast", "time": "07:30", "group": "Meals"},
+    {"id": "after_breakfast",  "label": "After breakfast",  "time": "09:00", "group": "Meals"},
+    {"id": "before_lunch",     "label": "Before lunch",     "time": "12:30", "group": "Meals"},
+    {"id": "after_lunch",      "label": "After lunch",      "time": "14:00", "group": "Meals"},
+    {"id": "before_dinner",    "label": "Before dinner",    "time": "19:30", "group": "Meals"},
+    {"id": "after_dinner",     "label": "After dinner",     "time": "21:00", "group": "Meals"},
+]
+VOICE_BY_ID = {v["id"]: v for v in VOICES}
 
-# Set these three in Render > Environment
+# Set these in Render > Environment
 DEVICE_KEY = os.environ.get("DEVICE_KEY", "")
 ADMIN_USER = os.environ.get("ADMIN_USER", "")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "")
@@ -36,33 +48,9 @@ dose_log = deque(maxlen=20)
 device = {"lastSeen": 0.0, "rssi": None, "langs": []}
 reminders_edited = False
 
-# ---------- voice clips ----------
-CLIP_DIR = os.path.join(app.root_path, "clips")   # optional defaults: clips/morning.mp3 ...
-clips = {}   # slot -> uploaded clip (kept in memory; lost when Render restarts)
 
-
-def make_clip(data, source):
-    return {"bytes": data, "ver": hashlib.md5(data).hexdigest()[:8], "source": source}
-
-
-def load_default_clips():
-    found = {}
-    for slot in SLOTS:
-        path = os.path.join(CLIP_DIR, slot + ".mp3")
-        if os.path.isfile(path):
-            with open(path, "rb") as f:
-                data = f.read()
-            if 0 < len(data) <= MAX_CLIP_BYTES:
-                found[slot] = make_clip(data, "default")
-    return found
-
-
-default_clips = load_default_clips()
-
-
-def get_clip(slot):
-    """Uploaded clip first, otherwise the default from the clips/ folder."""
-    return clips.get(slot) or default_clips.get(slot)
+# ---------- recorded clips: clips/<voice>_<lang>.mp3 (committed to the repo) ----------
+CLIP_DIR = os.path.join(app.root_path, "clips")
 
 
 def looks_like_mp3(data):
@@ -71,6 +59,25 @@ def looks_like_mp3(data):
     if data[:3] == b"ID3":
         return True
     return data[0] == 0xFF and (data[1] & 0xE0) == 0xE0
+
+
+def scan_clips():
+    found = {}
+    for voice in VOICES:
+        for lang in SUPPORTED_LANGUAGES:
+            key = f"{voice['id']}_{lang}"
+            path = os.path.join(CLIP_DIR, key + ".mp3")
+            if not os.path.isfile(path):
+                continue
+            with open(path, "rb") as f:
+                data = f.read()
+            if 0 < len(data) <= MAX_CLIP_BYTES and looks_like_mp3(data):
+                found[key] = {"path": path, "size": len(data),
+                              "ver": hashlib.md5(data).hexdigest()[:4]}
+    return found
+
+
+clips = scan_clips()
 
 
 def current_time():
@@ -94,8 +101,14 @@ def read_reminder(data):
     time_value = str(data.get("time", "")).strip()
     language = data.get("language", "en")
     repeat = data.get("repeat", "daily")
-    slot = str(data.get("slot", "")).strip().lower()
+    voice = str(data.get("voice", "")).strip().lower()
 
+    if voice and voice not in VOICE_BY_ID:
+        return None, "Select a valid voice option."
+    if voice and not name:
+        name = VOICE_BY_ID[voice]["label"]          # name is optional with a recorded voice
+    if voice and not time_value:
+        time_value = VOICE_BY_ID[voice]["time"]     # suggested time
     if not name or len(name) > MAX_NAME_LENGTH:
         return None, f"Medicine name is required (maximum {MAX_NAME_LENGTH} characters)."
     try:
@@ -106,34 +119,19 @@ def read_reminder(data):
         return None, "Select a valid language."
     if repeat not in ("daily", "once"):
         return None, "Select a valid repeat option."
-    if slot and slot not in SLOTS:
-        return None, "Select a valid voice option."
 
-    return {
-        "medicineName": name,
-        "time": time_value,
-        "language": language,
-        "repeat": repeat,
-        "slot": slot,
-    }, None
-
-
-@app.errorhandler(413)
-def too_large(_error):
-    return jsonify({"success": False,
-                    "message": "File too large (maximum 300 KB)."}), 413
+    return {"medicineName": name, "time": time_value, "language": language,
+            "repeat": repeat, "voice": voice}, None
 
 
 @app.before_request
 def require_auth():
-    # ESP32 endpoints: secret key header
     if request.path.startswith("/api/device/"):
         key = request.headers.get("X-Device-Key", "")
         if not DEVICE_KEY or not same(key, DEVICE_KEY):
             return jsonify({"success": False, "message": "Unauthorized device."}), 401
         return None
 
-    # Web page and web API: username + password
     if ADMIN_USER and ADMIN_PASS:
         auth = request.authorization
         if (not auth
@@ -200,54 +198,27 @@ def announce():
     })
 
 
-# ---------- voice clips (web page) ----------
+# ---------- voices (web page) ----------
 
-@app.route("/api/clips", methods=["GET"])
-def list_clips():
-    out = {}
-    for slot in SLOTS:
-        c = get_clip(slot)
-        out[slot] = {
-            "present": bool(c),
-            "source": c["source"] if c else None,
-            "size": len(c["bytes"]) if c else 0,
-        }
-    return jsonify({"success": True, "clips": out})
+@app.route("/api/voices", methods=["GET"])
+def list_voices():
+    out = []
+    for v in VOICES:
+        per_lang = {}
+        for lang in SUPPORTED_LANGUAGES:
+            c = clips.get(f"{v['id']}_{lang}")
+            per_lang[lang] = {"present": bool(c), "size": c["size"] if c else 0}
+        out.append({"id": v["id"], "label": v["label"], "time": v["time"],
+                    "group": v["group"], "clips": per_lang})
+    return jsonify({"success": True, "voices": out})
 
 
-@app.route("/api/clips/<slot>", methods=["GET"])
-def play_clip(slot):
-    c = get_clip(slot) if slot in SLOTS else None
+@app.route("/api/clips/<key>", methods=["GET"])
+def play_clip(key):
+    c = clips.get(key)
     if not c:
         return jsonify({"success": False, "message": "No clip."}), 404
-    return Response(c["bytes"], mimetype="audio/mpeg")
-
-
-@app.route("/api/clips/<slot>", methods=["POST"])
-def upload_clip(slot):
-    if slot not in SLOTS:
-        return jsonify({"success": False, "message": "Unknown dose slot."}), 404
-    f = request.files.get("file")
-    if not f:
-        return jsonify({"success": False, "message": "Choose an MP3 file first."}), 400
-    data = f.read(MAX_CLIP_BYTES + 1)
-    if len(data) > MAX_CLIP_BYTES:
-        return jsonify({"success": False,
-                        "message": "File too large (maximum 300 KB)."}), 400
-    if not looks_like_mp3(data):
-        return jsonify({"success": False, "message": "Please upload an MP3 file."}), 400
-    with lock:
-        clips[slot] = make_clip(data, "uploaded")
-    return jsonify({"success": True, "message": f"{slot.capitalize()} clip saved."})
-
-
-@app.route("/api/clips/<slot>", methods=["DELETE"])
-def delete_clip(slot):
-    if slot not in SLOTS:
-        return jsonify({"success": False, "message": "Unknown dose slot."}), 404
-    with lock:
-        clips.pop(slot, None)   # a default clip from clips/ comes back, if there is one
-    return jsonify({"success": True, "message": f"{slot.capitalize()} clip removed."})
+    return send_file(c["path"], mimetype="audio/mpeg", max_age=0)
 
 
 # ---------- ESP32 endpoints ----------
@@ -258,13 +229,17 @@ def reminder_for_device(r):
         "time": r["time"],
         "language": r["language"],
         "repeat": r["repeat"],
-        "speakText": build_speak_text(r["medicineName"], r["language"]),
+        "speakText": build_speak_text(r["medicineName"], r["language"]),  # TTS fallback
     }
-    slot = r.get("slot", "")
-    clip = get_clip(slot) if slot else None
-    if clip:
-        item["audioUrl"] = "/api/device/clip/" + slot
-        item["audioVer"] = clip["ver"]
+    voice = r.get("voice", "")
+    if voice:
+        key = f"{voice}_{r['language']}"
+        c = clips.get(key)
+        if c:
+            item["audioKey"] = key
+            item["audioUrl"] = "/api/device/clip/" + key
+            item["audioVer"] = c["ver"]
+            item["audioSize"] = c["size"]
     return item
 
 
@@ -277,8 +252,6 @@ def device_poll():
         device["langs"] = [l for l in langs if l in SUPPORTED_LANGUAGES]
 
         announcement = announcement_queue.popleft() if announcement_queue else None
-        # After a server restart the list is empty and unedited: tell the
-        # ESP32 not to wipe the schedule it saved in flash.
         valid = reminders_edited or len(reminders) > 0
         schedule = [reminder_for_device(r) for r in reminders]
 
@@ -290,13 +263,12 @@ def device_poll():
     })
 
 
-@app.route("/api/device/clip/<slot>", methods=["GET"])
-def device_clip(slot):
-    c = get_clip(slot) if slot in SLOTS else None
+@app.route("/api/device/clip/<key>", methods=["GET"])
+def device_clip(key):
+    c = clips.get(key)
     if not c:
         return jsonify({"success": False, "message": "No clip."}), 404
-    return Response(c["bytes"], mimetype="audio/mpeg",
-                    headers={"Cache-Control": "no-store"})
+    return send_file(c["path"], mimetype="audio/mpeg", max_age=0)
 
 
 @app.route("/api/device/ack", methods=["POST"])
@@ -330,7 +302,8 @@ def get_reminders():
     with lock:
         results = [r.copy() for r in reminders
                    if search in r["medicineName"].lower()
-                   or search in r["language"].lower()]
+                   or search in r["language"].lower()
+                   or search in r.get("voice", "").replace("_", " ")]
     return jsonify({"success": True, "reminders": results})
 
 

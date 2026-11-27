@@ -1,7 +1,8 @@
 const $ = (id) => document.getElementById(id);
 
-const SLOTS = ["morning", "afternoon", "evening", "night"];
-const MAX_CLIP_BYTES = 300 * 1024;
+const LANGS = ["en", "hi", "mr"];
+let VOICES = [];
+let player = null;
 
 async function api(url, options = {}) {
     const response = await fetch(url, {
@@ -11,13 +12,10 @@ async function api(url, options = {}) {
             ...options.headers
         }
     });
-
     const data = await response.json();
-
     if (!response.ok) {
         throw new Error(data.message || data.error || "Request failed.");
     }
-
     return data;
 }
 
@@ -28,27 +26,20 @@ function showMessage(id, message, success = true) {
 }
 
 function languageName(language) {
-    const languages = {
-        en: "English",
-        hi: "Hindi",
-        mr: "Marathi"
-    };
-
-    return languages[language] || language;
+    return { en: "English", hi: "Hindi", mr: "Marathi" }[language] || language;
 }
 
-function slotName(slot) {
-    return slot.charAt(0).toUpperCase() + slot.slice(1);
+function voiceInfo(id) {
+    return VOICES.find((v) => v.id === id);
 }
 
-// SYSTEM STATUS
+// ---------- SYSTEM STATUS ----------
 
 async function loadStatus() {
     try {
         const data = await api("/api/status");
 
-        $("serverStatus").textContent = data.deviceOnline
-            ? "ESP32 online" : "ESP32 offline";
+        $("serverStatus").textContent = data.deviceOnline ? "ESP32 online" : "ESP32 offline";
         $("serverType").textContent = data.server;
         $("rtcStatus").textContent = data.deviceOnline
             ? `Online (WiFi ${data.rssi} dBm)`
@@ -71,11 +62,10 @@ async function loadStatus() {
     }
 }
 
-// VOICE ANNOUNCEMENT
+// ---------- VOICE ANNOUNCEMENT ----------
 
 $("announcementForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-
     const button = event.submitter;
     button.disabled = true;
 
@@ -87,7 +77,6 @@ $("announcementForm").addEventListener("submit", async (event) => {
                 language: $("announcementLanguage").value
             })
         });
-
         showMessage("announcementResult", data.message);
         await loadStatus();
     } catch (error) {
@@ -97,133 +86,117 @@ $("announcementForm").addEventListener("submit", async (event) => {
     }
 });
 
-// DOSE VOICE CLIPS
+// ---------- VOICES: dropdown, preview, clip library ----------
 
-async function loadClips() {
-    try {
-        const data = await api("/api/clips");
-        const grid = $("clipGrid");
-        grid.replaceChildren();
+async function loadVoices() {
+    const data = await api("/api/voices");
+    VOICES = data.voices;
 
-        SLOTS.forEach((slot) => {
-            const info = data.clips[slot];
+    const select = $("reminderVoice");
+    const current = select.value;
+    select.length = 1;   // keep the text-to-speech option
 
-            const card = document.createElement("div");
-            card.className = "status-card clip-card";
-
-            const title = document.createElement("strong");
-            title.textContent = slotName(slot) + " dose";
-
-            const state = document.createElement("span");
-            state.className = "muted";
-            state.textContent = info.present
-                ? (info.source === "uploaded" ? "Your recording" : "Default recording") +
-                  ` (${Math.round(info.size / 1024)} KB)`
-                : "No clip - text-to-speech is used";
-
-            card.append(title, state);
-
-            if (info.present) {
-                const player = document.createElement("audio");
-                player.controls = true;
-                player.src = `/api/clips/${slot}?v=${Date.now()}`;
-                card.appendChild(player);
-            }
-
-            const fileInput = document.createElement("input");
-            fileInput.type = "file";
-            fileInput.accept = ".mp3,audio/mpeg";
-
-            const row = document.createElement("div");
-            row.className = "button-row";
-
-            const uploadButton = document.createElement("button");
-            uploadButton.type = "button";
-            uploadButton.textContent = "Upload";
-            uploadButton.addEventListener("click", () => uploadClip(slot, fileInput));
-            row.appendChild(uploadButton);
-
-            if (info.source === "uploaded") {
-                const removeButton = document.createElement("button");
-                removeButton.type = "button";
-                removeButton.className = "secondary";
-                removeButton.textContent = "Remove";
-                removeButton.addEventListener("click", () => removeClip(slot));
-                row.appendChild(removeButton);
-            }
-
-            card.append(fileInput, row);
-            grid.appendChild(card);
+    ["Time of day", "Meals"].forEach((groupName) => {
+        const group = document.createElement("optgroup");
+        group.label = groupName;
+        VOICES.filter((v) => v.group === groupName).forEach((v) => {
+            const option = document.createElement("option");
+            option.value = v.id;
+            option.textContent = v.label;
+            group.appendChild(option);
         });
-    } catch (error) {
-        showMessage("clipResult", error.message, false);
-    }
+        select.appendChild(group);
+    });
+    select.value = current;
+
+    renderClipTable();
+    updatePreview();
 }
 
-async function uploadClip(slot, fileInput) {
-    const file = fileInput.files[0];
-
-    if (!file) {
-        showMessage("clipResult", "Choose an MP3 file first.", false);
-        return;
-    }
-    if (file.size > MAX_CLIP_BYTES) {
-        showMessage("clipResult", "File too large (maximum 300 KB).", false);
-        return;
-    }
-
-    const form = new FormData();
-    form.append("file", file);
-
-    try {
-        const response = await fetch(`/api/clips/${slot}`, { method: "POST", body: form });
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-            throw new Error(data.message || "Upload failed.");
-        }
-
-        showMessage("clipResult",
-            data.message + " The ESP32 downloads it within about 30 seconds.");
-        await loadClips();
-    } catch (error) {
-        showMessage("clipResult", error.message, false);
-    }
+function playClip(key) {
+    if (player) player.pause();
+    player = new Audio(`/api/clips/${key}?v=${Date.now()}`);
+    player.play().catch(() => {});
 }
 
-async function removeClip(slot) {
-    if (!confirm(`Remove the ${slotName(slot)} clip?`)) {
-        return;
-    }
+function renderClipTable() {
+    const body = $("clipTableBody");
+    body.replaceChildren();
 
-    try {
-        const data = await api(`/api/clips/${slot}`, { method: "DELETE" });
-        showMessage("clipResult", data.message);
-        await loadClips();
-        await loadReminders($("reminderSearch").value.trim());
-    } catch (error) {
-        showMessage("clipResult", error.message, false);
-    }
+    VOICES.forEach((voice) => {
+        const row = document.createElement("tr");
+        const name = document.createElement("td");
+        name.textContent = voice.label;
+        row.appendChild(name);
+
+        LANGS.forEach((lang) => {
+            const cell = document.createElement("td");
+            const info = voice.clips[lang];
+            if (info.present) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "secondary";
+                button.textContent = `Play (${Math.round(info.size / 1024)} KB)`;
+                button.addEventListener("click", () => playClip(`${voice.id}_${lang}`));
+                cell.appendChild(button);
+            } else {
+                cell.textContent = "Missing";
+                cell.className = "clip-missing";
+            }
+            row.appendChild(cell);
+        });
+        body.appendChild(row);
+    });
 }
 
-// LOAD, SEARCH AND DISPLAY REMINDERS
+function updatePreview() {
+    const box = $("clipPreview");
+    box.replaceChildren();
+
+    const voiceId = $("reminderVoice").value;
+    const lang = $("reminderLanguage").value;
+
+    if (!voiceId) {
+        box.textContent = "The device will speak the medicine name using text-to-speech.";
+        return;
+    }
+    const voice = voiceInfo(voiceId);
+    if (voice && voice.clips[lang].present) {
+        const audio = document.createElement("audio");
+        audio.controls = true;
+        audio.src = `/api/clips/${voiceId}_${lang}`;
+        box.appendChild(audio);
+    } else {
+        box.textContent = `No ${voice ? voice.label.toLowerCase() : ""} clip in ${languageName(lang)} - ` +
+            "text-to-speech will be used instead.";
+        box.style.color = "#b42318";
+        return;
+    }
+    box.style.color = "";
+}
+
+$("reminderVoice").addEventListener("change", () => {
+    const voice = voiceInfo($("reminderVoice").value);
+    if (voice && !$("reminderTime").value) {
+        $("reminderTime").value = voice.time;   // suggested time, can be changed
+    }
+    updatePreview();
+});
+$("reminderLanguage").addEventListener("change", updatePreview);
+
+// ---------- LOAD, SEARCH AND DISPLAY REMINDERS ----------
 
 async function loadReminders(search = "") {
     try {
-        const data = await api(
-            "/api/reminders?search=" + encodeURIComponent(search)
-        );
-
+        const data = await api("/api/reminders?search=" + encodeURIComponent(search));
         const tbody = $("reminderTableBody");
         tbody.replaceChildren();
 
         if (data.reminders.length === 0) {
             const row = document.createElement("tr");
             const cell = document.createElement("td");
-
             cell.colSpan = 6;
             cell.textContent = "No reminders found.";
-
             row.appendChild(cell);
             tbody.appendChild(row);
             return;
@@ -232,12 +205,21 @@ async function loadReminders(search = "") {
         data.reminders.forEach((reminder) => {
             const row = document.createElement("tr");
 
+            let voiceText = "Text-to-speech";
+            if (reminder.voice) {
+                const voice = voiceInfo(reminder.voice);
+                const label = voice ? voice.label : reminder.voice;
+                voiceText = voice && !voice.clips[reminder.language].present
+                    ? `${label} (clip missing - text-to-speech)`
+                    : `${label} clip`;
+            }
+
             [
                 reminder.medicineName,
                 reminder.time,
                 languageName(reminder.language),
                 reminder.repeat === "daily" ? "Daily" : "Once",
-                reminder.slot ? slotName(reminder.slot) + " clip" : "Text-to-speech"
+                voiceText
             ].forEach((value) => {
                 const cell = document.createElement("td");
                 cell.textContent = value;
@@ -245,29 +227,22 @@ async function loadReminders(search = "") {
             });
 
             const actions = document.createElement("td");
-            const actionGroup = document.createElement("div");
-
-            actionGroup.className = "actions";
+            const group = document.createElement("div");
+            group.className = "actions";
 
             const editButton = document.createElement("button");
             editButton.textContent = "Edit";
             editButton.type = "button";
-
-            editButton.addEventListener("click", () => {
-                editReminder(reminder);
-            });
+            editButton.addEventListener("click", () => editReminder(reminder));
 
             const deleteButton = document.createElement("button");
             deleteButton.textContent = "Delete";
             deleteButton.type = "button";
             deleteButton.className = "delete-button";
+            deleteButton.addEventListener("click", () => deleteReminder(reminder.id));
 
-            deleteButton.addEventListener("click", () => {
-                deleteReminder(reminder.id);
-            });
-
-            actionGroup.append(editButton, deleteButton);
-            actions.appendChild(actionGroup);
+            group.append(editButton, deleteButton);
+            actions.appendChild(group);
             row.appendChild(actions);
             tbody.appendChild(row);
         });
@@ -276,43 +251,41 @@ async function loadReminders(search = "") {
     }
 }
 
-// SAVE A REMINDER TO ESP32 AND THE WEB APP
+// ---------- SAVE A REMINDER ----------
 
 $("reminderForm").addEventListener("submit", async (event) => {
     event.preventDefault();
 
     const id = $("reminderId").value;
-
     const reminder = {
         medicineName: $("medicineName").value.trim(),
         time: $("reminderTime").value,
         language: $("reminderLanguage").value,
         repeat: $("reminderRepeat").value,
-        slot: $("reminderSlot").value
+        voice: $("reminderVoice").value
     };
+
+    if (!reminder.medicineName && !reminder.voice) {
+        showMessage("reminderResult", "Enter a medicine name or choose a voice.", false);
+        return;
+    }
 
     const button = $("saveReminderButton");
     button.disabled = true;
 
     try {
-        const url = id
-            ? `/api/reminders/${encodeURIComponent(id)}`
-            : "/api/reminders";
-
+        const url = id ? `/api/reminders/${encodeURIComponent(id)}` : "/api/reminders";
         const data = await api(url, {
             method: id ? "PUT" : "POST",
             body: JSON.stringify(reminder)
         });
 
         let message = data.message + " The ESP32 syncs automatically within about 15 seconds.";
-
-        if (reminder.slot) {
-            const clips = await api("/api/clips");
-            if (!clips.clips[reminder.slot].present) {
-                message += ` Note: there is no ${reminder.slot} clip yet, so text-to-speech will be used.`;
-            }
+        const voice = voiceInfo(reminder.voice);
+        if (voice && !voice.clips[reminder.language].present) {
+            message += ` Note: there is no ${voice.label.toLowerCase()} clip in ` +
+                `${languageName(reminder.language)}, so text-to-speech will be used.`;
         }
-
         showMessage("reminderResult", message);
 
         resetReminderForm();
@@ -324,7 +297,7 @@ $("reminderForm").addEventListener("submit", async (event) => {
     }
 });
 
-// EDIT A REMINDER
+// ---------- EDIT / RESET / DELETE ----------
 
 function editReminder(reminder) {
     $("reminderId").value = reminder.id;
@@ -332,52 +305,37 @@ function editReminder(reminder) {
     $("reminderTime").value = reminder.time;
     $("reminderLanguage").value = reminder.language;
     $("reminderRepeat").value = reminder.repeat;
-    $("reminderSlot").value = reminder.slot || "";
+    $("reminderVoice").value = reminder.voice || "";
 
     $("saveReminderButton").textContent = "Update Reminder";
     $("cancelEditButton").hidden = false;
-
-    $("reminderForm").scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-    });
+    updatePreview();
+    $("reminderForm").scrollIntoView({ behavior: "smooth", block: "start" });
 }
-
-// RESET THE REMINDER FORM
 
 function resetReminderForm() {
     $("reminderForm").reset();
     $("reminderId").value = "";
     $("saveReminderButton").textContent = "Save Reminder";
     $("cancelEditButton").hidden = true;
+    updatePreview();
 }
 
 $("cancelEditButton").addEventListener("click", resetReminderForm);
 
-// DELETE A REMINDER FROM THE WEB APP LIST
-
 async function deleteReminder(id) {
-    if (!confirm("Delete this reminder?")) {
-        return;
-    }
+    if (!confirm("Delete this reminder?")) return;
 
     try {
-        const data = await api(
-            `/api/reminders/${encodeURIComponent(id)}`,
-            {
-                method: "DELETE"
-            }
-        );
-
+        const data = await api(`/api/reminders/${encodeURIComponent(id)}`, { method: "DELETE" });
         showMessage("reminderResult", data.message);
-
         await loadReminders($("reminderSearch").value.trim());
     } catch (error) {
         showMessage("reminderResult", error.message, false);
     }
 }
 
-// SEARCH AND CLEAR SEARCH
+// ---------- SEARCH ----------
 
 $("searchButton").addEventListener("click", () => {
     loadReminders($("reminderSearch").value.trim());
@@ -395,9 +353,15 @@ $("reminderSearch").addEventListener("keydown", (event) => {
     }
 });
 
-// INITIALIZE THE WEB APP
+// ---------- INIT ----------
 
-loadStatus();
-loadClips();
-loadReminders();
-setInterval(loadStatus, 10000);
+(async () => {
+    try {
+        await loadVoices();
+    } catch (error) {
+        showMessage("reminderResult", error.message, false);
+    }
+    loadStatus();
+    loadReminders();
+    setInterval(loadStatus, 10000);
+})();

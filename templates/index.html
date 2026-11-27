@@ -48,34 +48,24 @@
         </section>
 
         <section class="panel">
-            <h2>Dose Voice Clips</h2>
-            <p class="muted">
-                Upload a recorded voice (MP3, up to 300 KB, about 30 seconds) for each part of
-                the day. The ESP32 downloads it and plays it offline.
-            </p>
-            <div id="clipGrid" class="status-grid"></div>
-            <p id="clipResult" class="result" aria-live="polite"></p>
-        </section>
-
-        <section class="panel">
             <h2>Medicine Reminders</h2>
-            <p class="muted">Add a reminder or edit an existing one.</p>
+            <p class="muted">
+                Pick a voice (time of day or meal) and a language. The matching recorded clip is
+                played by the device. Without a voice, the medicine name is spoken with text-to-speech.
+            </p>
 
             <form id="reminderForm">
                 <input type="hidden" id="reminderId">
 
-                <label for="medicineName">Medicine name</label>
-                <input id="medicineName" maxlength="40"
-                    placeholder="Example: Vitamin tablet" required>
-
                 <div class="form-grid">
                     <div>
-                        <label for="reminderTime">Reminder time</label>
-                        <input type="time" id="reminderTime" required>
+                        <label for="reminderVoice">Voice</label>
+                        <select id="reminderVoice">
+                            <option value="">Text-to-speech (speaks the medicine name)</option>
+                        </select>
                     </div>
-
                     <div>
-                        <label for="reminderLanguage">Announcement language</label>
+                        <label for="reminderLanguage">Language</label>
                         <select id="reminderLanguage">
                             <option value="en">English</option>
                             <option value="hi">Hindi (हिन्दी)</option>
@@ -84,20 +74,24 @@
                     </div>
                 </div>
 
-                <label for="reminderSlot">Voice for this reminder</label>
-                <select id="reminderSlot">
-                    <option value="">Text-to-speech (speaks the medicine name)</option>
-                    <option value="morning">Recorded clip: Morning dose</option>
-                    <option value="afternoon">Recorded clip: Afternoon dose</option>
-                    <option value="evening">Recorded clip: Evening dose</option>
-                    <option value="night">Recorded clip: Night dose</option>
-                </select>
+                <div id="clipPreview" class="muted preview"></div>
 
-                <label for="reminderRepeat">Repeat</label>
-                <select id="reminderRepeat">
-                    <option value="daily">Daily</option>
-                    <option value="once">Once</option>
-                </select>
+                <div class="form-grid">
+                    <div>
+                        <label for="reminderTime">Reminder time</label>
+                        <input type="time" id="reminderTime" required>
+                    </div>
+                    <div>
+                        <label for="reminderRepeat">Repeat</label>
+                        <select id="reminderRepeat">
+                            <option value="daily">Daily</option>
+                            <option value="once">Once</option>
+                        </select>
+                    </div>
+                </div>
+
+                <label for="medicineName">Medicine name (optional when a voice is chosen)</label>
+                <input id="medicineName" maxlength="40" placeholder="Example: Vitamin tablet">
 
                 <div class="button-row">
                     <button type="submit" id="saveReminderButton">Save Reminder</button>
@@ -108,8 +102,7 @@
             </form>
 
             <div class="search-row">
-                <input id="reminderSearch"
-                    placeholder="Search medicine or language">
+                <input id="reminderSearch" placeholder="Search medicine, voice or language">
                 <button type="button" id="searchButton" class="secondary">Search</button>
                 <button type="button" id="clearSearchButton" class="secondary">Clear</button>
             </div>
@@ -129,10 +122,21 @@
                         </tr>
                     </thead>
                     <tbody id="reminderTableBody">
-                        <tr>
-                            <td colspan="6">Loading reminders...</td>
-                        </tr>
+                        <tr><td colspan="6">Loading reminders...</td></tr>
                     </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Voice Clip Library</h2>
+            <p class="muted">All recorded clips on the server. Tap a language to listen.</p>
+            <div class="table-wrap">
+                <table class="clip-table">
+                    <thead>
+                        <tr><th>Voice</th><th>English</th><th>Hindi</th><th>Marathi</th></tr>
+                    </thead>
+                    <tbody id="clipTableBody"></tbody>
                 </table>
             </div>
         </section>
@@ -158,8 +162,6 @@
         </section>
     </main>
 
-    <footer>
-        ESP32 voice reminder system
-    </footer>
+    <footer>ESP32 voice reminder system</footer>
 </body>
 </html>
