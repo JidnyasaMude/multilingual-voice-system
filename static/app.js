@@ -353,6 +353,29 @@ $("reminderSearch").addEventListener("keydown", (event) => {
     }
 });
 
+// ---------- DEVICE WIFI ----------
+
+$("wifiForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+        const data = await api("/api/wifi", {
+            method: "POST",
+            body: JSON.stringify({
+                ssid: $("wifiSsid").value.trim(),
+                password: $("wifiPassword").value
+            })
+        });
+        showMessage("wifiResult", data.message);
+        $("wifiForm").reset();
+    } catch (error) {
+        showMessage("wifiResult", error.message, false);
+    } finally {
+        button.disabled = false;
+    }
+});
+
 // ---------- INIT ----------
 
 (async () => {

@@ -142,6 +142,29 @@
         </section>
 
         <section class="panel">
+            <h2>Device WiFi</h2>
+            <p class="muted">
+                Add the WiFi of the place where the device will be used. The ESP32 saves it and
+                connects automatically whenever that network is in range. Do this while the
+                device is still online.
+            </p>
+            <form id="wifiForm">
+                <div class="form-grid">
+                    <div>
+                        <label for="wifiSsid">WiFi name</label>
+                        <input id="wifiSsid" maxlength="32" required>
+                    </div>
+                    <div>
+                        <label for="wifiPassword">WiFi password (empty if open)</label>
+                        <input id="wifiPassword" type="password" maxlength="63" autocomplete="off">
+                    </div>
+                </div>
+                <button type="submit">Send to device</button>
+            </form>
+            <p id="wifiResult" class="result" aria-live="polite"></p>
+        </section>
+
+        <section class="panel">
             <h2>System Status</h2>
             <div class="status-grid">
                 <div class="status-card">

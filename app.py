@@ -44,6 +44,7 @@ lock = Lock()
 reminders = []
 last_announcement = None
 announcement_queue = deque()
+wifi_queue = deque(maxlen=3)
 dose_log = deque(maxlen=20)
 device = {"lastSeen": 0.0, "rssi": None, "langs": []}
 reminders_edited = False
@@ -198,6 +199,22 @@ def announce():
     })
 
 
+# ---------- add a WiFi network to the device (web page) ----------
+
+@app.route("/api/wifi", methods=["POST"])
+def add_wifi():
+    data = request.get_json(silent=True) or {}
+    ssid = str(data.get("ssid", "")).strip()
+    password = str(data.get("password", ""))
+    if not ssid or len(ssid) > 32 or len(password) > 63:
+        return jsonify({"success": False,
+                        "message": "Enter the WiFi name (max 32) and password (max 63)."}), 400
+    with lock:
+        wifi_queue.append({"ssid": ssid, "password": password})
+    return jsonify({"success": True,
+                    "message": "Sent. The ESP32 saves this network at its next poll (about 15 seconds)."})
+
+
 # ---------- voices (web page) ----------
 
 @app.route("/api/voices", methods=["GET"])
@@ -252,12 +269,14 @@ def device_poll():
         device["langs"] = [l for l in langs if l in SUPPORTED_LANGUAGES]
 
         announcement = announcement_queue.popleft() if announcement_queue else None
+        wifi_cmd = wifi_queue.popleft() if wifi_queue else None
         valid = reminders_edited or len(reminders) > 0
         schedule = [reminder_for_device(r) for r in reminders]
 
     return jsonify({
         "success": True,
         "announcement": announcement,
+        "wifi": wifi_cmd,
         "scheduleValid": valid,
         "reminders": schedule,
     })
